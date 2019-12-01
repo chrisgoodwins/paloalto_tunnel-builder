@@ -128,6 +128,13 @@ def config_builder(instanceList):
             temp_item = item[13].replace(': ', ':').split(':')
             netObj_ike.peer_id_type = temp_item[0]
             netObj_ike.peer_id_value = temp_item[1]
+        # Work-around for a bug in pandevice that adds default value for peer_id_check
+        # Can be removed once the bug is fixed
+        ##############################################################################
+        else:
+            netObj_ike.peer_id_type = 'ipaddr'
+            netObj_ike.peer_id_value = item[10]
+        ##############################################################################
         if item[14] is not None and item[14].lower() == 'true':
             netObj_ike.enable_passive_mode = True
         else:
