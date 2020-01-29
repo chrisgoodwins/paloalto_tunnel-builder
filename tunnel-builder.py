@@ -22,13 +22,6 @@ import getpass
 import sys
 import re
 
-pan = None
-netObj_ike_list = []
-netObj_ipsec_list = []
-netObj_tunInt_list = []
-netObj_vr_list = []
-netObj_zone_list = []
-
 
 # Prompts the user to enter an address, then checks it's validity
 def getfwipfqdn():
@@ -65,13 +58,19 @@ def csv_reader(argv):
     else:
         csv_file = str(argv[1])
     print('')
-    file = open(csv_file, 'r').readlines()
-    return [item.replace('\n', '').split(',') for item in file if item != file[0]]
+    while True:
+        try:
+            with open(csv_file, 'r') as file:
+                file = file.readlines()
+                return [item.replace('\n', '').split(',') for item in file if item != file[0]]
+        except FileNotFoundError:
+            print('\nERROR - No such file or directory: {}'.format(csv_file))
+            csv_file = input('\nEnter the name of your VPN config file: ')
 
 
 # Parses the config file, and Instantiates the firewall and the objects to be used
 def config_parser(fw_addr, fw_admin, fw_pw, configList):
-    global pan, netObj_ike, netObj_ipsec, netObj_tunInt, netObj_vr, netObj_zone
+    global pan
     while True:
         try:
             pan = base.PanDevice.create_from_device(fw_addr, fw_admin, fw_pw)
@@ -81,37 +80,35 @@ def config_parser(fw_addr, fw_admin, fw_pw, configList):
             print('\n')
             fw_admin, fw_pw = getCreds()
             print('\n')
-    netObj_tunInt = [None for i in range(len(configList))]
-    netObj_vr = [None for i in range(len(configList))]
-    netObj_zone = [None for i in range(len(configList))]
-    netObj_ike = [None for i in range(len(configList))]
-    netObj_ipsec = [None for i in range(len(configList))]
     config_builder(configList)
 
 
 # Builds the pandevice objects from the csv file config elements
 def config_builder(instanceList):
-    global pan, netObj_ike_list, netObj_ipsec_list, netObj_tunInt_list, netObj_vr_list, netObj_zone_list
+    global netObj_ike_list, netObj_ipsec_list, netObj_tunInt_list, netObj_vr_list, netObj_zone_list
+    netObj_ike_list, netObj_ipsec_list, netObj_tunInt_list, netObj_vr_list, netObj_zone_list = [], [], [], [], []
+    vrDict, zoneDict = {}, {}
     for item in instanceList:
         item = [i if i != '' else None for i in item[:]]
-        netObj_tunInt, netObj_vr, netObj_zone, netObj_ike, netObj_ipsec = network.TunnelInterface(), network.VirtualRouter(), network.Zone(), network.IkeGateway(), network.IpsecTunnel()
+        netObj_tunInt = network.TunnelInterface()
         netObj_tunInt.name = item[0]
         netObj_tunInt.comment = item[1]
         netObj_tunInt.ip = item[2]
         netObj_tunInt.management_profile = item[3]
         netObj_tunInt_list.append(pan.add(netObj_tunInt))
-        netObj_vr.name = item[4]
-        netObj_vr.interface = item[0]
-        netObj_vr_list.append(pan.add(netObj_vr))
+        if item[4] not in vrDict.keys():
+            vrDict[item[4]] = []
+        vrDict[item[4]].append(item[0])
         if len(item[5]) > 31:
             print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[5], item[5][:31]))
             item[5] = item[5][:31]
-        netObj_zone.name = item[5]
-        netObj_zone.interface = item[0]
-        netObj_zone_list.append(pan.add(netObj_zone))
+        if item[5] not in zoneDict.keys():
+            zoneDict[item[5]] = []
+        zoneDict[item[5]].append(item[0])
         if len(item[6]) > 31:
             print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[6], item[6][:31]))
             item[6] = item[6][:31]
+        netObj_ike = network.IkeGateway()
         netObj_ike.name = item[6]
         netObj_ike.interface = item[7]
         netObj_ike.local_ip_address_type = 'ip'
@@ -128,13 +125,6 @@ def config_builder(instanceList):
             temp_item = item[13].replace(': ', ':').split(':')
             netObj_ike.peer_id_type = temp_item[0]
             netObj_ike.peer_id_value = temp_item[1]
-        # Work-around for a bug in pandevice that adds default value for peer_id_check
-        # Can be removed once the bug is fixed
-        ##############################################################################
-        else:
-            netObj_ike.peer_id_type = 'ipaddr'
-            netObj_ike.peer_id_value = item[10]
-        ##############################################################################
         if item[14] is not None and item[14].lower() == 'true':
             netObj_ike.enable_passive_mode = True
         else:
@@ -162,6 +152,7 @@ def config_builder(instanceList):
         if len(item[20]) > 31:
             print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[20], item[20][:31]))
             item[20] = item[20][:31]
+        netObj_ipsec = network.IpsecTunnel()
         netObj_ipsec.name = item[20]
         netObj_ipsec.tunnel_interface = item[21]
         if len(item[22]) > 31:
@@ -172,17 +163,31 @@ def config_builder(instanceList):
             item[23] = 'default'
         netObj_ipsec.ak_ipsec_crypto_profile = item[23]
         netObj_ipsec_list.append(pan.add(netObj_ipsec))
-        print('Pushing Config --- Tunnel-Int - {} // IKE-GW - {} // IPSec-Tunnel - {}'.format(netObj_tunInt.name, netObj_ike.name, netObj_ipsec.name))
+        print('Building Config --- Tunnel-Int - {} // IKE-GW - {} // IPSec-Tunnel - {}'.format(netObj_tunInt.name, netObj_ike.name, netObj_ipsec.name))
+    for key, value in vrDict.items():
+        netObj_vr = network.VirtualRouter()
+        netObj_vr.name = key
+        netObj_vr.interface = value
+        netObj_vr_list.append(pan.add(netObj_vr))
+    for key, value in zoneDict.items():
+        netObj_zone = network.Zone()
+        netObj_zone.name = key
+        netObj_zone.interface = value
+        netObj_zone_list.append(pan.add(netObj_zone))
 
 
 # Pushes the changes to the firewall
 def config_push():
-    global netObj_ike_list, netObj_ipsec_list, netObj_tunInt_list, netObj_vr_list, netObj_zone_list
     try:
+        print('\n\nCreating tunnel interfaces...')
         netObj_tunInt_list[0].create_similar()
-        netObj_vr_list[0].create_similar()
-        netObj_zone_list[0].create_similar()
+        print('Adding interfaces to virtual routers...')
+        [obj.create() for obj in netObj_vr_list]
+        print('Adding interfaces to zones...')
+        [obj.create() for obj in netObj_zone_list]
+        print('Creating IKE config...')
         netObj_ike_list[0].create_similar()
+        print('Creating IPsec config...')
         netObj_ipsec_list[0].create_similar()
         print('\n\nYour VPN config was successfully built and pushed to the firewall\n\nHave a great day!!\n\n')
     except errors.PanDeviceXapiError as e:
@@ -191,7 +196,6 @@ def config_push():
 
 
 def main():
-    global pan
     fw_addr = getfwipfqdn()
     fw_admin, fw_pw = getCreds()
     configList = csv_reader(sys.argv)
