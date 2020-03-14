@@ -26,28 +26,28 @@ import re
 # Prompts the user to enter an address, then checks it's validity
 def getfwipfqdn():
     while True:
-        fwipraw = input("\nPlease enter firewall IP or FQDN: ")
-        ipr = re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", fwipraw)
-        fqdnr = re.match(r"(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)", fwipraw)
+        fwipraw = input('\nPlease enter firewall IP or FQDN: ')
+        ipr = re.match(r'^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$', fwipraw)
+        fqdnr = re.match(r'(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)', fwipraw)
         if ipr:
             break
         elif fqdnr:
             break
         else:
-            print("\nThere was something wrong with your entry. Please try again...\n")
+            print('\nThere was something wrong with your entry. Please try again...\n')
     return fwipraw
 
 
 # Prompts the user to enter a username
 def getCreds():
     while True:
-        username = input("Please enter your user name: ")
-        usernamer = re.match(r"^[a-zA-Z0-9_-]{3,24}$", username)
+        username = input('Please enter your user name: ')
+        usernamer = re.match(r'^[\w-]{3,24}$', username)
         if usernamer:
-            password = getpass.getpass("Please enter your password: ")
+            password = getpass.getpass('Please enter your password: ')
             break
         else:
-            print("\nThere was something wrong with your entry. Please try again...\n")
+            print('\nThere was something wrong with your entry. Please try again...\n')
     return username, password
 
 
@@ -64,7 +64,7 @@ def csv_reader(argv):
                 file = file.readlines()
                 return [item.replace('\n', '').split(',') for item in file if item != file[0]]
         except FileNotFoundError:
-            print('\nERROR - No such file or directory: {}'.format(csv_file))
+            print(f'\nERROR - No such file or directory: {csv_file}')
             csv_file = input('\nEnter the name of your VPN config file: ')
 
 
@@ -76,7 +76,7 @@ def config_parser(fw_addr, fw_admin, fw_pw, configList):
             pan = base.PanDevice.create_from_device(fw_addr, fw_admin, fw_pw)
             break
         except errors.PanURLError as e:
-            print('Error connecting to PAN Device {} with user {}: {}'.format(fw_addr, fw_admin, e))
+            print(f'Error connecting to PAN Device {fw_addr} with user {fw_admin}: {e}')
             print('\n')
             fw_admin, fw_pw = getCreds()
             print('\n')
@@ -100,13 +100,13 @@ def config_builder(instanceList):
             vrDict[item[4]] = []
         vrDict[item[4]].append(item[0])
         if len(item[5]) > 31:
-            print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[5], item[5][:31]))
+            print('*' * 6 + f' Warning -- IKE-GW - {item[5]} name truncated to {item[5][:31]} due to length restriction')
             item[5] = item[5][:31]
         if item[5] not in zoneDict.keys():
             zoneDict[item[5]] = []
         zoneDict[item[5]].append(item[0])
         if len(item[6]) > 31:
-            print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[6], item[6][:31]))
+            print('*' * 6 + f' Warning -- IKE-GW - {item[6]} name truncated to {item[6][:31]} due to length restriction')
             item[6] = item[6][:31]
         netObj_ike = network.IkeGateway()
         netObj_ike.name = item[6]
@@ -150,20 +150,20 @@ def config_builder(instanceList):
             netObj_ike.dead_peer_detection_retry = temp_item[1]
         netObj_ike_list.append(pan.add(netObj_ike))
         if len(item[20]) > 31:
-            print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[20], item[20][:31]))
+            print('*' * 6 + f' Warning -- IKE-GW - {item[20]} name truncated to {item[20][:31]} due to length restriction')
             item[20] = item[20][:31]
         netObj_ipsec = network.IpsecTunnel()
         netObj_ipsec.name = item[20]
         netObj_ipsec.tunnel_interface = item[21]
         if len(item[22]) > 31:
-            print('*' * 6 + ' Warning -- IKE-GW - {} name truncated to {} due to length restriction'.format(item[22], item[22][:31]))
+            print('*' * 6 + f' Warning -- IKE-GW - {item[22]} name truncated to {item[22][:31]} due to length restriction')
             item[22] = item[22][:31]
         netObj_ipsec.ak_ike_gateway = item[22]
         if item[23] is None:
             item[23] = 'default'
         netObj_ipsec.ak_ipsec_crypto_profile = item[23]
         netObj_ipsec_list.append(pan.add(netObj_ipsec))
-        print('Building Config --- Tunnel-Int - {} // IKE-GW - {} // IPSec-Tunnel - {}'.format(netObj_tunInt.name, netObj_ike.name, netObj_ipsec.name))
+        print(f'Building Config --- Tunnel-Int - {netObj_tunInt.name} // IKE-GW - {netObj_ike.name} // IPSec-Tunnel - {netObj_ipsec.name}')
     for key, value in vrDict.items():
         netObj_vr = network.VirtualRouter()
         netObj_vr.name = key
@@ -191,7 +191,7 @@ def config_push():
         netObj_ipsec_list[0].create_similar()
         print('\n\nYour VPN config was successfully built and pushed to the firewall\n\nHave a great day!!\n\n')
     except errors.PanDeviceXapiError as e:
-        print('\n\nThere was an error pushing the config:\n{}\n'.format(e))
+        print(f'\n\nThere was an error pushing the config:\n{e}\n')
         exit(1)
 
 
